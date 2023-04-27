@@ -7,36 +7,25 @@
 
 import UIKit
 import Foundation
+import KeychainSwift
 
-class ViewController: UIViewController, UITextFieldDelegate {
+protocol SettingsViewControllerDelegate: AnyObject {
+    func biometricAuthStatusChanged(enabled: Bool)
+}
+
+class ViewController: UIViewController, UITextFieldDelegate, UIViewControllerTransitioningDelegate, SettingsViewControllerDelegate {
+    func biometricAuthStatusChanged(enabled: Bool) {
+        updateSavedLoginButtonAction()
+    }
+    
     override var preferredStatusBarStyle: UIStatusBarStyle {
         return .lightContent
     }
 
     private let currentSchedule = MySchedule()
     private var hasSavedLogin: Bool = false
-    private var savedCredentials: Credentials?
     
-    public struct Credentials: Codable {
-        let username: String
-        let password: String
-    }
-    
-    public func loadCredentials() -> Credentials? {
-        do {
-            if let documentDirectory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {
-                let fileURL = documentDirectory.appendingPathComponent("credentials.json")
-                
-                let data = try Data(contentsOf: fileURL)
-                let decoder = JSONDecoder()
-                let credentials = try decoder.decode(Credentials.self, from: data)
-                return credentials
-            }
-        } catch {
-            print("Error decoding credentials: \(error)")
-        }
-        return nil
-    }
+    private var savedCredentials: CredentialsManager.Credentials?
 
     private let mainTitle: UILabel = {
         let title = UILabel()
@@ -110,12 +99,65 @@ class ViewController: UIViewController, UITextFieldDelegate {
     private let savedLoginButton: UIButton = {
         let button = UIButton(type: .system)
         button.setTitleColor(.white, for: .normal)
+        button.setTitle("undefined", for: .normal)
         button.backgroundColor = UIColor.from(0x28A745)
         button.translatesAutoresizingMaskIntoConstraints = false
         button.layer.cornerRadius = 10 // Add corner radius
         button.layer.masksToBounds = true
         return button
     }()
+    
+    private let settingsButton: UIButton = {
+        let button = UIButton(type: .system)
+        if let addIcon = UIImage(named: "settings") {
+            let newSize = CGSize(width: 24, height: 24)
+            UIGraphicsBeginImageContextWithOptions(newSize, false, 0.0)
+            addIcon.draw(in: CGRect(origin: .zero, size: newSize))
+            let resizedImage = UIGraphicsGetImageFromCurrentImageContext()
+            UIGraphicsEndImageContext()
+            
+            button.setImage(resizedImage, for: .normal)
+        }
+        button.tintColor = .white
+        button.translatesAutoresizingMaskIntoConstraints = false
+        return button
+    }()
+    
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        
+        if CredentialsManager.shared.hasSavedCredentials() {
+            hasSavedLogin.toggle()
+        }
+        
+        view.backgroundColor = UIColor.from(0x2c2c2c)
+        
+        userIDTextField.delegate = self
+        passwordTextField.delegate = self
+        
+        let userID = UserDefaults.standard.integer(forKey: "savedLoginUserID")
+        print(userID)
+        savedLoginButton.setTitle("Login as \(userID)", for: .normal)
+        
+        setupViews(savedLogin: hasSavedLogin)
+        loginButton.addTarget(self, action: #selector(loginButtonPressed), for: .touchUpInside)
+        settingsButton.addTarget(self, action: #selector(settingsButtonPressed), for: .touchUpInside)
+        
+        let longPressRecognizer = UILongPressGestureRecognizer(target: self, action: #selector(handleLongPress(_:)))
+        savedLoginButton.addGestureRecognizer(longPressRecognizer)
+        
+        if biometricAuthorizationIsEnabled() {
+            print("savedLoginButtonPressedWithBioAuth")
+            savedLoginButton.addTarget(self, action: #selector(savedLoginButtonPressedWithBioAuth), for: .touchUpInside)
+        } else {
+            print("savedLoginButtonPressed")
+            savedLoginButton.addTarget(self, action: #selector(savedLoginButtonPressed), for: .touchUpInside)
+        }
+    }
+    
+    private func biometricAuthorizationIsEnabled() -> Bool {
+        return UserDefaults.standard.bool(forKey: "biometricAuthEnabled")
+    }
     
     private func getStartOfWeek(from date: Date) -> Date {
         let calendar = Calendar.current
@@ -126,29 +168,10 @@ class ViewController: UIViewController, UITextFieldDelegate {
         return startOfWeek
     }
     
-    override func viewDidLoad() {
-        super.viewDidLoad()
-        
-        if let credentials = loadCredentials() {
-            savedCredentials = credentials
-            hasSavedLogin.toggle()
-        }
-        
-        view.backgroundColor = UIColor.from(0x2c2c2c)
-        
-        userIDTextField.delegate = self
-        passwordTextField.delegate = self
-        
-        if let userIDString = savedCredentials?.username {
-            savedLoginButton.setTitle("Login as \(userIDString)", for: .normal)
-        }
-        
-        setupViews(savedLogin: hasSavedLogin)
-        loginButton.addTarget(self, action: #selector(loginButtonPressed), for: .touchUpInside)
-        
-        let longPressRecognizer = UILongPressGestureRecognizer(target: self, action: #selector(handleLongPress(_:)))
-        savedLoginButton.addGestureRecognizer(longPressRecognizer)
-        savedLoginButton.addTarget(self, action: #selector(savedLoginButtonPressed), for: .touchUpInside)
+    private func reloadViewController() {
+        let viewController = ViewController()
+        viewController.modalPresentationStyle = .fullScreen
+        present(viewController, animated: true, completion: nil)
     }
     
     func textFieldShouldReturn(_ textField: UITextField) -> Bool {
@@ -162,6 +185,7 @@ class ViewController: UIViewController, UITextFieldDelegate {
     
     private func setupViews(savedLogin: Bool) {
         view.addSubview(container)
+        view.addSubview(settingsButton)
         container.addSubview(mainTitle)
         container.addSubview(userIDTextField)
         container.addSubview(passwordTextField)
@@ -179,6 +203,9 @@ class ViewController: UIViewController, UITextFieldDelegate {
             container.centerYAnchor.constraint(equalTo: view.centerYAnchor),
             container.widthAnchor.constraint(equalToConstant: 280),
             container.heightAnchor.constraint(equalToConstant: containerHeight),
+            
+            settingsButton.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 16),
+            settingsButton.centerXAnchor.constraint(equalTo: view.leadingAnchor, constant: 24),
 
             mainTitle.centerXAnchor.constraint(equalTo: container.centerXAnchor),
             mainTitle.topAnchor.constraint(equalTo: container.topAnchor, constant: 20),
@@ -220,6 +247,10 @@ class ViewController: UIViewController, UITextFieldDelegate {
         if shiftMessages.first == "undefined" {
             return false
         }
+        let generator = UINotificationFeedbackGenerator()
+        generator.prepare()
+        generator.notificationOccurred(.success)
+        
         let schViewController = ScheduleViewController()
         schViewController.shiftMessages = shiftMessages
         schViewController.scheduleInstance = currentSchedule
@@ -229,23 +260,41 @@ class ViewController: UIViewController, UITextFieldDelegate {
         return true
     }
     
-    private func removeLoginCredentials() {
-        do {
-            if let documentDirectory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {
-                let fileURL = documentDirectory.appendingPathComponent("credentials.json")
-                try FileManager.default.removeItem(at: fileURL)
-            }
-        } catch {
-            print("Error removing credentials: \(error)")
+    private func updateSavedLoginButtonAction() {
+        if biometricAuthorizationIsEnabled() {
+            print("savedLoginButtonPressedWithBioAuth")
+            savedLoginButton.removeTarget(self, action: #selector(savedLoginButtonPressed), for: .touchUpInside)
+            savedLoginButton.addTarget(self, action: #selector(savedLoginButtonPressedWithBioAuth), for: .touchUpInside)
+        } else {
+            print("savedLoginButtonPressed")
+            savedLoginButton.removeTarget(self, action: #selector(savedLoginButtonPressedWithBioAuth), for: .touchUpInside)
+            savedLoginButton.addTarget(self, action: #selector(savedLoginButtonPressed), for: .touchUpInside)
         }
     }
     
-    private func reloadViewController() {
-        let viewController = ViewController()
-        viewController.modalPresentationStyle = .fullScreen
-        present(viewController, animated: true, completion: nil)
+    private func handleSavedLogin() {
+        guard let savedCredentials = CredentialsManager.shared.loadCredentials(),
+              let userID = Int(savedCredentials.userID) else {
+            print("Error: Invalid saved credentials")
+            return
+        }
+        
+        self.savedCredentials = savedCredentials
+        self.currentSchedule.setUserAndPass(user: userID, pass: savedCredentials.password.base64Decoded!)
+        self.currentSchedule.setNewDate(date: self.getStartOfWeek(from: Date()))
+        
+        let shiftMessages = self.currentSchedule.getShiftMessages()
+        if !self.handleLogin(shiftMessages) {
+            self.showAlert(title: "Error", message: "Saved Login details incorrect")
+        }
     }
-
+    
+    private func showAlert(title: String, message: String) {
+        let alertController = UIAlertController(title: title, message: message, preferredStyle: .alert)
+        let okAction = UIAlertAction(title: "OK", style: .default, handler: nil)
+        alertController.addAction(okAction)
+        present(alertController, animated: true, completion: nil)
+    }
     
     @objc private func loginButtonPressed() {
         let userID = userIDTextField.text ?? ""
@@ -269,44 +318,49 @@ class ViewController: UIViewController, UITextFieldDelegate {
     }
     
     @objc private func savedLoginButtonPressed() {
-        guard let userIDString = savedCredentials?.username,
-              let password = savedCredentials?.password,
-              let userID = Int(userIDString) else {
-            print("Error: Invalid saved credentials")
-            return
-        }
-        
-        currentSchedule.setUserAndPass(user: userID, pass: password.base64Decoded!)
-        currentSchedule.setNewDate(date: getStartOfWeek(from: Date()))
-        
-        let shiftMessages = currentSchedule.getShiftMessages()
-        if !handleLogin(shiftMessages) {
-            showAlert(title: "Error", message: "Saved Login details incorrect")
+        print("bioAuth turned off, handling saved login now ...")
+        self.handleSavedLogin()
+    }
+    
+    @objc private func savedLoginButtonPressedWithBioAuth() {
+        BiometricAuthentication.shared.authenticateUser { [weak self] success in
+            guard let self = self else { return }
+            
+            if success {
+                print("savedLoginButtonPressedWithBioAuth success: true")
+                self.handleSavedLogin()
+            } else {
+                print("savedLoginButtonPressedWithBioAuth success: false")
+                self.showAlert(title: "Error", message: "Biometric authentication failed")
+            }
         }
     }
     
     @objc private func handleLongPress(_ recognizer: UILongPressGestureRecognizer) {
         if recognizer.state == .began {
-            guard let userIDString = savedCredentials?.username else {
-                return
-            }
-            let alert = UIAlertController(title: "Remove saved login?", message: "Do you want to remove the saved login details for \(userIDString)?", preferredStyle: .alert)
+            let impactFeedbackGenerator = UIImpactFeedbackGenerator(style: .rigid)
+            impactFeedbackGenerator.prepare()
+            impactFeedbackGenerator.impactOccurred()
+            
+            let alert = UIAlertController(title: "Remove saved login?", message: "Do you want to remove the saved login details for _?", preferredStyle: .alert)
             alert.addAction(UIAlertAction(title: "Cancel", style: .cancel, handler: nil))
             alert.addAction(UIAlertAction(title: "Remove", style: .destructive, handler: { [weak self] _ in
-                self!.removeLoginCredentials()
-                self!.reloadViewController()
+                if CredentialsManager.shared.deleteCredentials() {
+                    self!.reloadViewController()
+                } else {
+                    print("Error: deleting credentials")
+                }
             }))
             present(alert, animated: true, completion: nil)
         }
     }
-
     
-    private func showAlert(title: String, message: String) {
-        let alertController = UIAlertController(title: title, message: message, preferredStyle: .alert)
-        let okAction = UIAlertAction(title: "OK", style: .default, handler: nil)
-        alertController.addAction(okAction)
-        present(alertController, animated: true, completion: nil)
+    @objc private func settingsButtonPressed() {
+        let settingsViewController = SettingsViewController()
+        settingsViewController.delegate = self
+        present(settingsViewController, animated: true)
     }
+
 }
 
 extension UIColor {

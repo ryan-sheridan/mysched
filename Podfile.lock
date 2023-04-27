@@ -1,0 +1,16 @@
+PODS:
+  - KeychainSwift (20.0.0)
+
+DEPENDENCIES:
+  - KeychainSwift
+
+SPEC REPOS:
+  trunk:
+    - KeychainSwift
+
+SPEC CHECKSUMS:
+  KeychainSwift: 0ce6a4d13f7228054d1a71bb1b500448fb2ab837
+
+PODFILE CHECKSUM: c19784564112c4d0f140e65c9203d5d4203054d7
+
+COCOAPODS: 1.12.0

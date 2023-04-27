@@ -6,6 +6,7 @@
 //
 
 import UIKit
+import KeychainSwift
 
 class ScheduleViewController: UIViewController, UITableViewDataSource, UITableViewDelegate {
     
@@ -19,11 +20,6 @@ class ScheduleViewController: UIViewController, UITableViewDataSource, UITableVi
     var leftButton: UIButton?
     var addButton: UIButton?
     var infoButton: UIButton?
-    
-    public struct Credentials: Codable {
-        let username: String
-        let password: String
-    }
     
     // MARK: UI Elements
     
@@ -224,23 +220,6 @@ class ScheduleViewController: UIViewController, UITableViewDataSource, UITableVi
         tableView.register(CustomTableViewCell.self, forCellReuseIdentifier: "CustomCell")
     }
     
-    public func storeCredentials(username: String, password: String) {
-        let credentials = Credentials(username: username, password: password)
-        
-        do {
-            let encoder = JSONEncoder()
-            let data = try encoder.encode(credentials)
-            
-            if let documentDirectory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {
-                let fileURL = documentDirectory.appendingPathComponent("credentials.json")
-                try data.write(to: fileURL)
-            }
-        } catch {
-            print("Error storing credentials: \(error)")
-        }
-    }
-
-    
     // MARK: Table View Data Source
     
     func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
@@ -290,8 +269,9 @@ class ScheduleViewController: UIViewController, UITableViewDataSource, UITableVi
         let alert = UIAlertController(title: "Save Login", message: "Do you want to save the login for \(userID)?", preferredStyle: .alert)
         
         let okAction = UIAlertAction(title: "OK", style: .default) { _ in
-            print("\(userID) \(pass)")
-            self.storeCredentials(username: String(userID), password: pass)
+            if CredentialsManager.shared.saveCredentials(userID: String(userID), password: pass) {
+                UserDefaults.standard.set(userID, forKey: "savedLoginUserID")
+            }
         }
         
         let cancelAction = UIAlertAction(title: "Cancel", style: .cancel, handler: nil)
