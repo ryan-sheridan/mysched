@@ -524,25 +524,14 @@ class MySchedule {
     }
     
     private func minToTime(_ minutes: Int) -> String {
-        var hours = minutes / 60
-        let newMinutes = (minutes - (hours * 60))
-        var hoursLeadingZero = ""
-        var minutesLeadingZero = ""
+        let hours = minutes / 60 % 24
+        let newMinutes = minutes % 60
+        let formattedHours = String(format: "%02d", hours)
+        let formattedMinutes = String(format: "%02d", newMinutes)
         
-        if hours < 10 {
-            hoursLeadingZero = "0"
-        }
-        if newMinutes < 10 {
-            minutesLeadingZero = "0"
-        }
-        
-        if hours >= 24 {
-            hours = hours - 24
-        }
-        
-        return "\(hoursLeadingZero)\(hours):\(minutesLeadingZero)\(newMinutes)"
+        return "\(formattedHours):\(formattedMinutes)"
     }
-    
+
     private func getArrayOfShift() -> [Shift] {
         if !getShiftsJSON() {
             print("Login details incorrect!")
