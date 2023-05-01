@@ -30,6 +30,12 @@ class MySchedule {
     
     private var gShiftsJSON: String = ""
     
+    private struct RawShift: Codable {
+        let startDate: Int
+        let startTime: Int
+        let duration: Int
+    }
+    
     private struct Shift: Codable {
         let startDate: Int
         let startTime: Int
@@ -45,6 +51,10 @@ class MySchedule {
             self.startDate = startDate
             self.startTime = startTime
             self.duration = duration
+        }
+
+        static func emptyShift(forDate date: Int) -> Shift {
+            return Shift(startDate: date, startTime: 0, duration: 0)
         }
     }
     
@@ -538,24 +548,33 @@ class MySchedule {
             print("Login details incorrect!")
             return [Shift(fromInt: 0)]
         }
-        let json = gShiftsJSON
-        let decoder = JSONDecoder()
-
-        do {
-            shifts = try decoder.decode([Shift].self, from: json.data(using: .utf8)!)
-            // loop through days of week, if missing day of week assign empty shift to shift array
-            for day in gStartWeek!..<gStartWeek!+7 {
-                if !shifts.contains(where: { $0.startDate == day }) {
-                    let newShift = Shift(startDate: day, startTime: 0, duration: 0)
-                    shifts.append(newShift)
+        var shifts: [Shift] = []
+        
+        if let jsonData = gShiftsJSON.data(using: .utf8) {
+            do {
+                let decoder = JSONDecoder()
+                let rawShifts = try decoder.decode([RawShift].self, from: jsonData)
+                
+                if let startDate = gStartWeek {
+                    let totalDays = 7 // Number of days you want to generate shifts for
+                    for i in 0..<totalDays {
+                        let currentDate = Date.fromInt(startDate)?.addingTimeInterval(Double(i) * 86400).toInt() ?? 0
+                        
+                        if let currentShift = rawShifts.first(where: { $0.startDate == currentDate }) {
+                            shifts.append(Shift(startDate: currentShift.startDate, startTime: currentShift.startTime, duration: currentShift.duration))
+                        } else {
+                            shifts.append(Shift(startDate: currentDate, startTime: 0, duration: 0))
+                        }
+                    }
                 }
+            } catch {
+                print("Error decoding JSON: \(error.localizedDescription)")
             }
-            return shifts
-        } catch {
-            print("Error parsing JSON: \(error)")
         }
+        
         return shifts
     }
+
     
     public func getShiftMessages() -> [String] {
         // turn our shifts json into a array of shifts
@@ -579,8 +598,21 @@ class MySchedule {
                 shiftMessages.append("Not Scheduled")
             }
         }
-        print("hello: \(shiftMessages)")
         return shiftMessages
+    }
+}
+
+extension Date {
+    static func fromInt(_ value: Int) -> Date? {
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyyMMdd"
+        return dateFormatter.date(from: String(value))
+    }
+    
+    func toInt() -> Int {
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyyMMdd"
+        return Int(dateFormatter.string(from: self)) ?? 0
     }
 }
 
