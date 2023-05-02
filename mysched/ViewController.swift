@@ -46,6 +46,23 @@ class ViewController: UIViewController, UITextFieldDelegate, UIViewControllerTra
         return view
     }()
 
+    private var activityIndicator: UIActivityIndicatorView = {
+        let indicator = UIActivityIndicatorView(style: .large)
+        indicator.translatesAutoresizingMaskIntoConstraints = false
+        indicator.hidesWhenStopped = true
+        indicator.transform = CGAffineTransform(scaleX: 0.5, y: 0.5)
+        indicator.color = .white
+        return indicator
+    }()
+
+    private var savedActivityIndicator: UIActivityIndicatorView = {
+        let indicator = UIActivityIndicatorView(style: .large)
+        indicator.translatesAutoresizingMaskIntoConstraints = false
+        indicator.hidesWhenStopped = true
+        indicator.transform = CGAffineTransform(scaleX: 0.5, y: 0.5)
+        indicator.color = .white
+        return indicator
+    }()
     
     private let userIDTextField: UITextField = {
         let textField = PaddedTextField(padding: UIEdgeInsets(top: 0, left: 10, bottom: 0, right: 10),
@@ -196,6 +213,9 @@ class ViewController: UIViewController, UITextFieldDelegate, UIViewControllerTra
             container.addSubview(savedLoginButton)
         }
         
+        loginButton.addSubview(activityIndicator)
+        savedLoginButton.addSubview(savedActivityIndicator)
+        
         let containerHeight: CGFloat = savedLogin ? 405 : 300
         
         var constraints = [
@@ -224,6 +244,12 @@ class ViewController: UIViewController, UITextFieldDelegate, UIViewControllerTra
             loginButton.topAnchor.constraint(equalTo: passwordTextField.bottomAnchor, constant: 20),
             loginButton.widthAnchor.constraint(equalToConstant: 220),
             loginButton.heightAnchor.constraint(equalToConstant: 50),
+            
+            activityIndicator.centerYAnchor.constraint(equalTo: loginButton.centerYAnchor),
+            activityIndicator.centerXAnchor.constraint(equalTo: loginButton.centerXAnchor),
+            
+            savedActivityIndicator.centerYAnchor.constraint(equalTo: savedLoginButton.centerYAnchor),
+            savedActivityIndicator.centerXAnchor.constraint(equalTo: savedLoginButton.centerXAnchor),
         ]
         
         if savedLogin {
@@ -273,19 +299,24 @@ class ViewController: UIViewController, UITextFieldDelegate, UIViewControllerTra
     }
     
     private func handleSavedLogin() {
-        guard let savedCredentials = CredentialsManager.shared.loadCredentials(),
-              let userID = Int(savedCredentials.userID) else {
-            print("Error: Invalid saved credentials")
-            return
-        }
-        
-        self.savedCredentials = savedCredentials
-        self.currentSchedule.setUserAndPass(user: userID, pass: savedCredentials.password.base64Decoded!)
-        self.currentSchedule.setNewDate(date: self.getStartOfWeek(from: Date()))
-        
-        let shiftMessages = self.currentSchedule.getShiftMessages()
-        if !self.handleLogin(shiftMessages) {
-            self.showAlert(title: "Error", message: "Saved Login details incorrect")
+        DispatchQueue.global(qos: .userInitiated).async { [self] in
+            guard let savedCredentials = CredentialsManager.shared.loadCredentials(),
+                  let userID = Int(savedCredentials.userID) else {
+                print("Error: Invalid saved credentials")
+                return
+            }
+
+            self.savedCredentials = savedCredentials
+            self.currentSchedule.setUserAndPass(user: userID, pass: savedCredentials.password.base64Decoded!)
+            self.currentSchedule.setNewDate(date: self.getStartOfWeek(from: Date()))
+
+            let shiftMessages = self.currentSchedule.getShiftMessages()
+
+            DispatchQueue.main.async {
+                if !self.handleLogin(shiftMessages) {
+                    self.showAlert(title: "Error", message: "Saved Login details incorrect")
+                }
+            }
         }
     }
     
@@ -307,17 +338,31 @@ class ViewController: UIViewController, UITextFieldDelegate, UIViewControllerTra
         } else if password.isEmpty {
             showAlert(title: "Error", message: "Password field is empty.")
         } else {
-            currentSchedule.setUserAndPass(user: Int(userID)!, pass: password.base64Encoded!)
-            currentSchedule.setNewDate(date: getStartOfWeek(from: Date()))
+            loginButton.setTitle("", for: .normal)
+            activityIndicator.startAnimating()
             
-            let shiftMessages = currentSchedule.getShiftMessages()
-            if !handleLogin(shiftMessages) {
-                showAlert(title: "Error", message: "Login details incorrect")
+            DispatchQueue.global(qos: .userInitiated).async { [self] in
+                currentSchedule.setUserAndPass(user: Int(userID)!, pass: password.base64Encoded!)
+                currentSchedule.setNewDate(date: getStartOfWeek(from: Date()))
+                
+                let shiftMessages = currentSchedule.getShiftMessages()
+                
+                DispatchQueue.main.async { [self] in
+                    activityIndicator.stopAnimating()
+                    
+                    if !handleLogin(shiftMessages) {
+                        loginButton.setTitle("Login", for: .normal)
+                        showAlert(title: "Error", message: "Login details incorrect")
+                    }
+                }
             }
         }
     }
     
     @objc private func savedLoginButtonPressed() {
+        savedLoginButton.setTitle("", for: .normal)
+        savedActivityIndicator.startAnimating()
+        
         print("bioAuth turned off, handling saved login now ...")
         self.handleSavedLogin()
     }
@@ -327,6 +372,9 @@ class ViewController: UIViewController, UITextFieldDelegate, UIViewControllerTra
             guard let self = self else { return }
             
             if success {
+                self.savedLoginButton.setTitle("", for: .normal)
+                self.savedActivityIndicator.startAnimating()
+                
                 print("savedLoginButtonPressedWithBioAuth success: true")
                 self.handleSavedLogin()
             } else {

@@ -15,6 +15,10 @@ class ScheduleViewController: UIViewController, UITableViewDataSource, UITableVi
     var shiftMessages: [String] = []
     var scheduleInstance: MySchedule?
     
+    var gPersonInfo: [String]?
+    var rightLabel: UILabel?
+
+    
     var logoutButton: UIButton?
     var rightButton: UIButton?
     var leftButton: UIButton?
@@ -57,12 +61,80 @@ class ScheduleViewController: UIViewController, UITableViewDataSource, UITableVi
         view.translatesAutoresizingMaskIntoConstraints = false
         return view
     }()
+    
+    func createEstimatedPayContainer() -> UIView {
+        let container = UIView()
+        container.backgroundColor = UIColor.from(0x3c3c3c)
+        container.translatesAutoresizingMaskIntoConstraints = false
+        
+        let leftLabel = UILabel()
+        rightLabel = UILabel()
+        
+        leftLabel.text = "Estimated Week Pay"
+        rightLabel?.text = "Loading"
+        
+        leftLabel.textColor = .white
+        rightLabel?.textColor = .white
+        
+        leftLabel.translatesAutoresizingMaskIntoConstraints = false
+        rightLabel?.translatesAutoresizingMaskIntoConstraints = false
+        
+        container.addSubview(leftLabel)
+        container.addSubview(rightLabel!)
+        
+        NSLayoutConstraint.activate([
+            leftLabel.centerYAnchor.constraint(equalTo: container.centerYAnchor),
+            leftLabel.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 16),
+            
+            rightLabel!.centerYAnchor.constraint(equalTo: container.centerYAnchor),
+            rightLabel!.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -16)
+        ])
+        
+        return container
+    }
 
+    private func updateRightLabel() {
+        self.rightLabel?.text = "Loading ..."
+        scheduleInstance!.getPersonInfo { (personInfo) in
+            if let personInfo = personInfo {
+                self.gPersonInfo = personInfo
+                
+                DispatchQueue.main.async { [self] in
+                    let currencyString = personInfo[5]
+                    let formatter = NumberFormatter()
+                    formatter.numberStyle = .currency
+                    formatter.currencySymbol = "€"
+
+                    if let number = formatter.number(from: currencyString) {
+                        var amount = number.doubleValue
+                        amount = (scheduleInstance?.weeklyHours())! * amount
+                        
+                        if let currencyString = formatter.string(from: NSNumber(value: amount)) {
+                            self.rightLabel?.text = currencyString
+                        }
+                        
+                    } else {
+                        print("Failed to convert currency string to Double.")
+                    }
+                    
+                }
+
+                print("Person info: \(personInfo)")
+            } else {
+                print("Failed to fetch person info")
+            }
+        }
+    }
     
     // MARK: View Controller Lifecycle
     
     override func viewDidLoad() {
         super.viewDidLoad()
+        
+        let estimatedPayContainer = createEstimatedPayContainer()
+        view.addSubview(estimatedPayContainer)
+        
+        updateRightLabel()
         
         view.backgroundColor = UIColor.from(0x2c2c2c)
         bannerTitle.text = scheduleInstance?.getDateText()
@@ -180,7 +252,7 @@ class ScheduleViewController: UIViewController, UITableViewDataSource, UITableVi
             tableView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             tableView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             tableView.topAnchor.constraint(equalTo: bannerView.bottomAnchor),
-            tableView.bottomAnchor.constraint(equalTo: unwrappedLogoutButton.topAnchor, constant: -10),
+            tableView.bottomAnchor.constraint(equalTo: buttonHolderView.topAnchor, constant: -40),
             
             // Logout button
             unwrappedLogoutButton.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
@@ -215,6 +287,11 @@ class ScheduleViewController: UIViewController, UITableViewDataSource, UITableVi
             
             unwrappedInfoButton.leadingAnchor.constraint(equalTo: bannerView.leadingAnchor, constant: 16),
             unwrappedInfoButton.centerYAnchor.constraint(equalTo: bannerView.centerYAnchor),
+            
+            estimatedPayContainer.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            estimatedPayContainer.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            estimatedPayContainer.centerYAnchor.constraint(equalTo: tableView.bottomAnchor),
+            estimatedPayContainer.heightAnchor.constraint(equalToConstant: 44)
         ])
         
         tableView.register(CustomTableViewCell.self, forCellReuseIdentifier: "CustomCell")
@@ -228,14 +305,17 @@ class ScheduleViewController: UIViewController, UITableViewDataSource, UITableVi
     
     func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
         let cell = tableView.dequeueReusableCell(withIdentifier: "CustomCell", for: indexPath) as! CustomTableViewCell
-
-        let daysOfWeek = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
-
-        cell.dayLabel.text = daysOfWeek[indexPath.row % 7]
-        cell.shiftMessageLabel.text = shiftMessages[indexPath.row]
-
+        
+        if indexPath.row < shiftMessages.count {
+            let daysOfWeek = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+            
+            cell.dayLabel.text = daysOfWeek[indexPath.row % 7]
+            cell.shiftMessageLabel.text = shiftMessages[indexPath.row]
+        }
+        
         return cell
     }
+
     
     // MARK: Button Actions
     
@@ -254,12 +334,14 @@ class ScheduleViewController: UIViewController, UITableViewDataSource, UITableVi
     @objc func leftButtonTapped() {
         scheduleInstance?.goBackOneWeek()
         guard let newShiftMessages = scheduleInstance?.getShiftMessages() else { return }
+        updateRightLabel()
         updateTableView(newShiftMessages)
     }
     
     @objc func rightButtonTapped() {
         scheduleInstance?.goForwardOneWeek()
         guard let newShiftMessages = scheduleInstance?.getShiftMessages() else { return }
+        updateRightLabel()
         updateTableView(newShiftMessages)
     }
     
@@ -283,7 +365,7 @@ class ScheduleViewController: UIViewController, UITableViewDataSource, UITableVi
     }
     
     @objc func infoButtonTapped() {
-        guard let userInfo = scheduleInstance?.getPersonInfo() else { return }
+        guard let userInfo = gPersonInfo else { return }
         
         let alertTitle = "Employee Info"
         let alertMessage = """

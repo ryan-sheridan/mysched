@@ -15,6 +15,8 @@ class MySchedule {
     private var gPersonID: String = ""
     private var gStoreNumber: String = ""
     
+    private var totalMinutes: Double = 0.0
+    
     private var gStartWeek: Int?
     private var gReflexisToken: String?
     
@@ -459,19 +461,18 @@ class MySchedule {
         return true
     }
     
-    public func getPersonInfo() -> [String]? {
-        var personInfo: [String]?
-        
+    public func getPersonInfo(completion: @escaping ([String]?) -> Void) {
         getEmpJsp(xReflexisFormToken: gReflexisToken!) { [self] (data, response, error) in
+            var personInfo: [String]?
             if let error = error {
                 print("Error: \(error.localizedDescription)")
-                personInfo = nil
+                completion(nil)
                 return
             }
             
             guard let data = data, let response = response as? HTTPURLResponse, response.statusCode == 200 else {
                 print("Error: No data or invalid response")
-                personInfo = nil
+                completion(nil)
                 return
             }
             
@@ -515,12 +516,9 @@ class MySchedule {
                 print("Error: Unable to convert data to string")
                 personInfo = nil
             }
+            
+            completion(personInfo)
         }
-        
-        // Wait for the network request to finish before returning the person info
-        while personInfo == nil {}
-        
-        return personInfo
     }
     
     private func minToTime(_ minutes: Int) -> String {
@@ -531,8 +529,10 @@ class MySchedule {
         
         return "\(formattedHours):\(formattedMinutes)"
     }
+    
 
     private func getArrayOfShift() -> [Shift] {
+        totalMinutes = 0
         if !getShiftsJSON() {
             print("Login details incorrect!")
             return [Shift(fromInt: 0)]
@@ -551,6 +551,8 @@ class MySchedule {
                         
                         if let currentShift = rawShifts.first(where: { $0.startDate == currentDate }) {
                             shifts.append(Shift(startDate: currentShift.startDate, startTime: currentShift.startTime, duration: currentShift.duration))
+                            totalMinutes += Double(currentShift.duration)
+                            totalMinutes -= 45 // 30 min first break, 15 second break
                         } else {
                             shifts.append(Shift(startDate: currentDate, startTime: 0, duration: 0))
                         }
@@ -588,6 +590,10 @@ class MySchedule {
             }
         }
         return shiftMessages
+    }
+    
+    public func weeklyHours() -> Double {
+        return self.totalMinutes / 60
     }
 }
 
