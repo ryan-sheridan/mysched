@@ -406,6 +406,7 @@ class ViewController: UIViewController, UITextFieldDelegate, UIViewControllerTra
     @objc private func settingsButtonPressed() {
         let settingsViewController = SettingsViewController()
         settingsViewController.delegate = self
+        settingsViewController.modalPresentationStyle = .overFullScreen
         present(settingsViewController, animated: true)
     }
 

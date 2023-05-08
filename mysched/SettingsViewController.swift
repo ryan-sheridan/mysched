@@ -22,6 +22,18 @@ class SettingsViewController: UIViewController, UITableViewDelegate, UITableView
             UserDefaults.standard.set(newValue, forKey: "biometricAuthEnabled")
         }
     }
+    
+    var showEstimatedPay: Bool {
+        get {
+            if UserDefaults.standard.object(forKey: "showEstimatedPay") == nil {
+                UserDefaults.standard.set(false, forKey: "showEstimatedPay")
+            }
+            return UserDefaults.standard.bool(forKey: "showEstimatedPay")
+        }
+        set {
+            UserDefaults.standard.set(newValue, forKey: "showEstimatedPay")
+        }
+    }
 
     let bannerTitle: UILabel = {
         let label = UILabel()
@@ -38,6 +50,9 @@ class SettingsViewController: UIViewController, UITableViewDelegate, UITableView
         view.addSubview(bannerTitle)
         
         biometricAuthEnabled = UserDefaults.standard.bool(forKey: "biometricAuthEnabled")
+        
+        let panGesture = UIPanGestureRecognizer(target: self, action: #selector(handlePanGesture(_:)))
+        view.addGestureRecognizer(panGesture)
         
         NSLayoutConstraint.activate([
             bannerTitle.centerXAnchor.constraint(equalTo: view.centerXAnchor),
@@ -77,7 +92,7 @@ class SettingsViewController: UIViewController, UITableViewDelegate, UITableView
     // MARK: - Table View Delegate & Data Source
     
     func numberOfSections(in tableView: UITableView) -> Int {
-        return 2
+        return 3
     }
     
     func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
@@ -88,13 +103,21 @@ class SettingsViewController: UIViewController, UITableViewDelegate, UITableView
     func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
         let cell = tableView.dequeueReusableCell(withIdentifier: "cell", for: indexPath)
         
-        let toggleSwitch = UISwitch()
-        toggleSwitch.isOn = biometricAuthEnabled
-        toggleSwitch.addTarget(self, action: #selector(biometricAuthSwitchToggled), for: .valueChanged)
-        
-        if indexPath[0] == 0 {
+        if indexPath.section == 0 {
+            let biometricAuthSwitch = UISwitch()
+            biometricAuthSwitch.isOn = biometricAuthEnabled
+            biometricAuthSwitch.addTarget(self, action: #selector(biometricAuthSwitchToggled), for: .valueChanged)
+            
             cell.textLabel?.text = "Biometric Authentication"
-            cell.accessoryView = toggleSwitch
+            cell.accessoryView = biometricAuthSwitch
+            cell.textLabel?.textColor = UIColor.from(0xf0f0f0)
+        } else if indexPath.section == 1 {
+            let showEstimatedPaySwitch = UISwitch()
+            showEstimatedPaySwitch.isOn = showEstimatedPay
+            showEstimatedPaySwitch.addTarget(self, action: #selector(showEstimatedPaySwitchToggled), for: .valueChanged)
+            
+            cell.textLabel?.text = "Show Estimated Week Pay"
+            cell.accessoryView = showEstimatedPaySwitch
             cell.textLabel?.textColor = UIColor.from(0xf0f0f0)
         } else {
             cell.textLabel?.text = "Remove Saved Login"
@@ -104,6 +127,10 @@ class SettingsViewController: UIViewController, UITableViewDelegate, UITableView
         cell.backgroundColor = UIColor.from(0x1c1c1e)
         
         return cell
+    }
+
+    @objc func showEstimatedPaySwitchToggled(sender: UISwitch) {
+        showEstimatedPay = sender.isOn
     }
     
     @objc func biometricAuthSwitchToggled(sender: UISwitch) {
@@ -121,6 +148,29 @@ class SettingsViewController: UIViewController, UITableViewDelegate, UITableView
             }
         }
     }
+    
+    @objc func handlePanGesture(_ recognizer: UIPanGestureRecognizer) {
+        let translation = recognizer.translation(in: view)
+        let yTranslationThreshold: CGFloat = 50
+        
+        switch recognizer.state {
+        case .changed:
+            if translation.y > 0 {
+                view.frame.origin.y = UIScreen.main.bounds.height / 2 + translation.y
+            }
+        case .ended:
+            if translation.y > yTranslationThreshold {
+                dismiss(animated: true, completion: nil)
+            } else {
+                UIView.animate(withDuration: 0.25) {
+                    self.view.frame.origin.y = UIScreen.main.bounds.height / 2
+                }
+            }
+        default:
+            break
+        }
+    }
+
 
 }
 

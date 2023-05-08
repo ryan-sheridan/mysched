@@ -131,8 +131,13 @@ class ScheduleViewController: UIViewController, UITableViewDataSource, UITableVi
     override func viewDidLoad() {
         super.viewDidLoad()
         
-        let estimatedPayContainer = createEstimatedPayContainer()
-        view.addSubview(estimatedPayContainer)
+        let showEstimatedPay = UserDefaults.standard.bool(forKey: "showEstimatedPay")
+        var estimatedPayContainer = UIView()
+        
+        if showEstimatedPay {
+            estimatedPayContainer = createEstimatedPayContainer()
+            view.addSubview(estimatedPayContainer)
+        }
         
         updateRightLabel()
         
@@ -241,7 +246,7 @@ class ScheduleViewController: UIViewController, UITableViewDataSource, UITableVi
         unwrappedLeftButton.translatesAutoresizingMaskIntoConstraints = false
         unwrappedRightButton.translatesAutoresizingMaskIntoConstraints = false
         
-        NSLayoutConstraint.activate([
+        var constraints = [
             // Banner view
             bannerView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             bannerView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
@@ -252,7 +257,7 @@ class ScheduleViewController: UIViewController, UITableViewDataSource, UITableVi
             tableView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             tableView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             tableView.topAnchor.constraint(equalTo: bannerView.bottomAnchor),
-            tableView.bottomAnchor.constraint(equalTo: buttonHolderView.topAnchor, constant: -40),
+            tableView.bottomAnchor.constraint(equalTo: tableView.topAnchor, constant: 308),
             
             // Logout button
             unwrappedLogoutButton.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
@@ -288,11 +293,19 @@ class ScheduleViewController: UIViewController, UITableViewDataSource, UITableVi
             unwrappedInfoButton.leadingAnchor.constraint(equalTo: bannerView.leadingAnchor, constant: 16),
             unwrappedInfoButton.centerYAnchor.constraint(equalTo: bannerView.centerYAnchor),
             
-            estimatedPayContainer.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            estimatedPayContainer.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            estimatedPayContainer.centerYAnchor.constraint(equalTo: tableView.bottomAnchor),
-            estimatedPayContainer.heightAnchor.constraint(equalToConstant: 44)
-        ])
+            
+        ]
+        
+        if showEstimatedPay {
+            constraints += [
+                estimatedPayContainer.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+                estimatedPayContainer.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+                estimatedPayContainer.topAnchor.constraint(equalTo: tableView.bottomAnchor),
+                estimatedPayContainer.heightAnchor.constraint(equalToConstant: 44)
+            ]
+        }
+        
+        NSLayoutConstraint.activate(constraints)
         
         tableView.register(CustomTableViewCell.self, forCellReuseIdentifier: "CustomCell")
     }
@@ -334,14 +347,20 @@ class ScheduleViewController: UIViewController, UITableViewDataSource, UITableVi
     @objc func leftButtonTapped() {
         scheduleInstance?.goBackOneWeek()
         guard let newShiftMessages = scheduleInstance?.getShiftMessages() else { return }
-        updateRightLabel()
+        let showEstimatedPay = UserDefaults.standard.bool(forKey: "showEstimatedPay")
+        if showEstimatedPay {
+            updateRightLabel()
+        }
         updateTableView(newShiftMessages)
     }
     
     @objc func rightButtonTapped() {
         scheduleInstance?.goForwardOneWeek()
         guard let newShiftMessages = scheduleInstance?.getShiftMessages() else { return }
-        updateRightLabel()
+        let showEstimatedPay = UserDefaults.standard.bool(forKey: "showEstimatedPay")
+        if showEstimatedPay {
+            updateRightLabel()
+        }
         updateTableView(newShiftMessages)
     }
     
@@ -402,6 +421,8 @@ class CustomTableViewCell: UITableViewCell {
         return label
     }()
     
+    let border = CALayer()
+    
     override init(style: UITableViewCell.CellStyle, reuseIdentifier: String?) {
         super.init(style: style, reuseIdentifier: reuseIdentifier)
         
@@ -417,10 +438,25 @@ class CustomTableViewCell: UITableViewCell {
             shiftMessageLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -16),
             shiftMessageLabel.centerYAnchor.constraint(equalTo: centerYAnchor),
         ])
+        
+        // Add a bottom border to the cell
+        let width = CGFloat(1.0)
+        border.borderColor = UIColor.from(0x2c2c2c)!.cgColor
+        border.borderWidth = width
+        contentView.layer.addSublayer(border)
+        contentView.layer.masksToBounds = true
     }
     
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
     }
+    
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        let width = CGFloat(1.0)
+        border.frame = CGRect(x: 0, y: contentView.frame.size.height - width, width: contentView.frame.size.width, height: width)
+    }
 }
+
+
 
